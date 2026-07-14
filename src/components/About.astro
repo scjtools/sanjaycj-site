@@ -1,0 +1,307 @@
+---
+import { about } from "../data/site";
+import HalftonePattern from "./HalftonePattern.astro";
+
+// Country silhouettes ('#' filled, '.' empty), fed to HalftonePattern's
+// `buildings` prop so they render through the same grid/physics pipeline as
+// the KL skyline. Rasterized from coastline polygons by
+// scripts/country-shapes/rasterize.mjs — regenerate there, don't hand-edit.
+// SKY_CELL must match HalftonePattern's.
+const SKY_CELL = 5;
+
+const MAURITIUS_CORE = [
+  "..............###........",
+  "............#######......",
+  "............########.....",
+  "...........#########.....",
+  "..........##########.....",
+  "..........###########....",
+  "..........############...",
+  ".........##############..",
+  ".........##############..",
+  "......#################..",
+  ".....###################.",
+  ".....###################.",
+  "....#####################",
+  "....#####################",
+  "...######################",
+  "...######################",
+  "...#####################.",
+  "...#####################.",
+  "...#####################.",
+  "..#####################..",
+  "...##################....",
+  "..###################....",
+  ".#####################...",
+  "#####################....",
+  "####################.....",
+  ".#################.......",
+  "...#############.........",
+  "......########...........",
+];
+
+// Peninsula (left) + Borneo/Sabah & Sarawak (right); sea gap collapsed.
+const MALAYSIA_CORE = [
+  "#..........................................................",
+  "####.......................................................",
+  "#####.....#................................................",
+  ".####....###.....................................###.......",
+  ".####.##.####....................................####......",
+  ".#############..................................######.....",
+  ".##############................................######......",
+  ".###############...............................#########...",
+  ".###############.............................#############.",
+  ".################............................##############",
+  "..###############...........................##############.",
+  "..###############..........................##############..",
+  "..###############.......................#..##############..",
+  "...##############......................#######.......#.....",
+  "...##############.....................########.............",
+  "....#############....................#########.............",
+  ".....############...................##########.............",
+  ".....############................############..............",
+  "......###########.............##############...............",
+  ".....############.............##############...............",
+  "......############............#############................",
+  "........###########.....#....##############................",
+  ".........##########.....###################................",
+  "...........#########......########....#....................",
+  "............########.......######..........................",
+  "..............#######......................................",
+  "................#####......................................",
+  "................##..#......................................",
+];
+
+// Ireland (left) + Great Britain (right), Irish Sea gap widened.
+const UK_CORE = [
+  "................####.........",
+  "................####.........",
+  "...............####..........",
+  ".............#########.......",
+  ".............#########.......",
+  "..............########.......",
+  "..............#######........",
+  ".....##.......#######........",
+  "....#####......######........",
+  "....######....########.......",
+  ".#########.....########......",
+  ".########.......#######......",
+  ".########.......########.....",
+  ".########..........######....",
+  "..#######..........######....",
+  "..#######...........######...",
+  ".########...........######...",
+  "########.........#########...",
+  "######...........###########.",
+  ".###..............###########",
+  "..................###########",
+  "................############.",
+  "................############.",
+  "..................##########.",
+  ".................###########.",
+  ".................########....",
+  "................###..........",
+  "...............##............",
+];
+
+function padHeight(rows: string[], height: number, width: number): string[] {
+  const extra = height - rows.length;
+  const top = Math.max(0, Math.floor(extra / 2));
+  const bottom = Math.max(0, extra - top);
+  const blank = ".".repeat(width);
+  return [...Array(top).fill(blank), ...rows, ...Array(bottom).fill(blank)];
+}
+
+function padWidth(rows: string[], width: number): string[] {
+  return rows.map((row) => {
+    const extra = width - row.length;
+    const left = Math.max(0, Math.floor(extra / 2));
+    const right = Math.max(0, extra - left);
+    return ".".repeat(left) + row + ".".repeat(right);
+  });
+}
+
+// Pad all three to a common grid so their fit-scaled cell size matches
+// (each shape centred, never stretched).
+const GRID_HEIGHT = Math.max(MAURITIUS_CORE.length, MALAYSIA_CORE.length, UK_CORE.length);
+const GRID_WIDTH = Math.max(MAURITIUS_CORE[0].length, MALAYSIA_CORE[0].length, UK_CORE[0].length);
+
+const SHAPE_PX_H = GRID_HEIGHT * SKY_CELL;
+
+const COUNTRIES = [
+  {
+    core: MAURITIUS_CORE,
+    label: "Mauritius",
+    caption: "Where I live now",
+    sprite: "/sprites/about-pal-02.png",
+    greeting: "sa va?",
+  },
+  {
+    core: MALAYSIA_CORE,
+    label: "Malaysia",
+    caption: "Where I'm from",
+    sprite: "/sprites/about-pal-01.png",
+    greeting: "apa khabar?",
+  },
+  {
+    core: UK_CORE,
+    label: "United Kingdom",
+    caption: "Where I studied",
+    sprite: "/sprites/about-pal-03.png",
+    greeting: "how's it going?",
+  },
+].map((c) => {
+  const grid = padWidth(padHeight(c.core, GRID_HEIGHT, c.core[0].length), GRID_WIDTH);
+  const widthPx = grid[0].length * SKY_CELL;
+  return { ...c, widthPx, building: { x0: -widthPx / 2, grid } };
+});
+---
+
+<section id="about" class="relative overflow-hidden border-t border-hairline bg-hatch">
+  <HalftonePattern class="pointer-events-none" showSkyline={false} />
+  <canvas id="about-firework-canvas" class="pointer-events-none fixed inset-0 z-[999] h-full w-full" aria-hidden="true"></canvas>
+
+  <div class="relative z-10 mx-auto max-w-6xl px-4 py-16 sm:px-6 sm:py-20">
+    <div class="flex flex-wrap items-end justify-between gap-4">
+      <div>
+        <h2 class="font-pixel text-3xl tracking-tight sm:text-4xl">{about.heading}</h2>
+      </div>
+    </div>
+
+    <div class="mt-8 space-y-4 text-base leading-relaxed text-ink-mute">
+      {about.paragraphs.map((p) => (
+        <p>{p}</p>
+      ))}
+    </div>
+
+    <div class="mt-10 border border-hairline-strong bg-bg p-6 sm:p-10">
+      <div class="grid grid-cols-1 gap-10 sm:grid-cols-3 sm:gap-6">
+        {COUNTRIES.map((c) => (
+          <div class="flex flex-col items-center text-center">
+            <div
+              class="relative w-full max-w-[200px] sm:max-w-[var(--shape-w)]"
+              style={`--shape-w:${c.widthPx}px; height:${SHAPE_PX_H}px;`}
+            >
+              <HalftonePattern
+                class="pointer-events-none"
+                showAmbient={false}
+                showFiller={false}
+                fit={true}
+                buildings={[c.building]}
+              />
+            </div>
+            <p class="font-pixel mt-4 text-sm sm:text-base">{c.label}</p>
+            <p class="mt-1 text-[10px] text-ink-mute sm:text-xs">{c.caption}</p>
+            <div class="relative mt-4">
+              <button
+                type="button"
+                data-about-pal={c.greeting}
+                aria-label={`Say hi from ${c.label}`}
+                class="block bg-transparent p-0 transition-transform duration-200 hover:scale-110"
+              >
+                <img src={c.sprite} alt="" width="67" height="67" class="pixelated w-[58px] sm:w-[67px]" />
+              </button>
+              <div
+                data-pal-popup
+                class="pointer-events-none absolute bottom-full left-1/2 mb-2 -translate-x-1/2 whitespace-nowrap font-pixel text-sm text-accent transition-opacity duration-200"
+                style="opacity: 0;"
+              ></div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+
+    <div class="mt-16">
+      <h3 class="font-pixel text-3xl tracking-tight sm:text-4xl">Experience</h3>
+
+      <div class="mt-10 grid gap-4 sm:grid-cols-2">
+        {about.experience.map((job) => (
+          <div class="flex border-2 border-ink bg-bg p-1">
+            <div class="flex-1 border border-hairline p-4">
+              <h4 class="font-pixel text-lg">{job.role}</h4>
+              <p class="mt-1 text-sm text-accent">{job.company} · {job.location}</p>
+
+              <div class="mt-3">
+                <span class="eyebrow font-pixel inline-block whitespace-nowrap border border-hairline px-2 py-1 text-ink-mute">
+                  {job.dates}
+                </span>
+              </div>
+
+              {job.points.length > 0 && (
+                <ul class="mt-3 space-y-1.5 text-sm leading-relaxed text-ink-mute">
+                  {job.points.map((point) => (
+                    <li class="flex gap-2">
+                      <span class="text-accent">·</span>
+                      <span>{point}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+
+    <div class="mt-16">
+      <h3 class="font-pixel text-3xl tracking-tight sm:text-4xl">Education</h3>
+
+      <div class="mt-10 grid gap-4 sm:grid-cols-2">
+        {about.education.map((edu) => (
+          <div class="flex border-2 border-ink bg-bg p-1">
+            <div class="flex-1 border border-hairline p-4">
+              <h4 class="font-pixel text-lg">{edu.institution}</h4>
+              <p class="mt-1 text-sm text-accent">{edu.qualification} · {edu.location}</p>
+
+              <div class="mt-3">
+                <span class="eyebrow font-pixel inline-block whitespace-nowrap border border-hairline px-2 py-1 text-ink-mute">
+                  {edu.dates}
+                </span>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  </div>
+</section>
+
+<script>
+  import { createSparkField } from "../scripts/sparks";
+
+  // Click a country pal to greet + spark-burst. Re-run per page entry and
+  // tear down the previous spark field so its listeners/rAF don't stack up.
+  const win = window as unknown as { __aboutTeardown?: () => void };
+
+  function initAboutPals() {
+    win.__aboutTeardown?.();
+
+    const canvas = document.getElementById("about-firework-canvas") as HTMLCanvasElement | null;
+    const sparks = canvas ? createSparkField(canvas) : null;
+    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+    document.querySelectorAll<HTMLButtonElement>("[data-about-pal]").forEach((btn) => {
+      let hideTimer: ReturnType<typeof setTimeout> | null = null;
+      const popup = btn.parentElement?.querySelector<HTMLElement>("[data-pal-popup]");
+      btn.addEventListener("click", () => {
+        if (!reduceMotion) {
+          const rect = btn.getBoundingClientRect();
+          sparks?.burst(rect.left + rect.width / 2, rect.top + rect.height / 2);
+        }
+        if (popup) {
+          if (hideTimer) clearTimeout(hideTimer);
+          popup.textContent = btn.dataset.aboutPal ?? "";
+          popup.style.opacity = "1";
+          hideTimer = setTimeout(() => {
+            popup.style.opacity = "0";
+          }, 2000);
+        }
+      });
+    });
+
+    win.__aboutTeardown = () => sparks?.destroy();
+  }
+
+  document.addEventListener("astro:page-load", initAboutPals);
+</script>

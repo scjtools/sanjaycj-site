@@ -1,0 +1,122 @@
+---
+import { hero } from "../data/site";
+import HalftonePattern from "./HalftonePattern.astro";
+---
+
+<section id="top" class="relative overflow-hidden border-b border-hairline-strong bg-hatch">
+  <HalftonePattern class="pointer-events-none" />
+  <canvas id="pal-firework-canvas" class="pointer-events-none fixed inset-0 z-[999] h-full w-full" aria-hidden="true"></canvas>
+
+  <div class="relative z-10 flex flex-col items-center px-4 pb-[265px] pt-[103px] sm:px-6">
+    <div class="relative w-full max-w-lg border border-hairline-strong bg-bg p-6 text-center sm:p-10">
+      <div class="absolute left-1 -top-[46px] w-16 sm:-left-24 sm:-top-[58px] sm:w-20 md:w-24">
+        <button
+          id="pal-sprite-btn"
+          type="button"
+          class="pixelated pixel-btn block w-full -rotate-6 bg-bg p-0 transition-all duration-200 hover:scale-110"
+          title="Shuffle Pal"
+          aria-label="Shuffle Pal"
+        >
+          <img
+            id="pal-sprite-img"
+            src="/sprites/hero-pal-01.png"
+            alt="Pixel-art mascot"
+            width="96"
+            height="96"
+            class="pixelated w-full"
+            loading="eager"
+          />
+        </button>
+        <div
+          id="pal-popup-text"
+          class="pointer-events-none absolute left-full top-[30%] ml-4 -translate-y-1/2 font-pixel text-sm text-accent transition-opacity duration-200 whitespace-nowrap"
+          style="opacity: 0;"
+        ></div>
+      </div>
+
+      <h1 class="font-pixel text-4xl leading-[1.2] sm:text-5xl mt-[5px]">
+        {hero.headline}
+      </h1>
+      <p class="eyebrow mt-3 text-accent">{hero.roles}</p>
+      <div class="mx-auto mt-6 max-w-md space-y-3 text-base leading-relaxed text-ink-mute">
+        {hero.subhead.map((line) => <p class="px-[30px]">{line}</p>)}
+      </div>
+      <div class="mt-8 flex flex-wrap justify-center gap-4">
+        <a
+          href={hero.primaryCta.href}
+          class="pixel-btn font-pixel bg-bg px-5 py-2.5 text-sm transition-colors hover:bg-surface"
+        >
+          {hero.primaryCta.label}
+        </a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<style>
+  #pal-sprite-btn:hover {
+    filter: drop-shadow(0 0 40px rgba(100, 200, 255, 0.8)) drop-shadow(0 0 20px rgba(100, 200, 255, 0.6));
+  }
+</style>
+
+<script>
+  import { createSparkField } from "../scripts/sparks";
+
+  const palSprites = Array.from(
+    { length: 16 },
+    (_, i) => `/sprites/hero-pal-${String(i + 1).padStart(2, "0")}.png`
+  );
+
+  const popupTexts = [
+    "wow", "such amaze", "very internets", "much happy", "giddyup!",
+    "yo-yo ma!", "these pretzels are making me thirsty!", "cou cou",
+    "selamat pagi", "good morning", "hello there", "forth eorlingas!",
+    "mellon", "bonjour", "alamak!", "boop", "beep boop", "aiyo", "vamos!",
+    "ka-chow!", "bababooey!", "you found me", "do it again", "shuffle time",
+    "click responsibly", "you'll never walk alone", "nothing happened",
+    "it's super effective!", "speak friend and enter", "you shall not pass!",
+  ];
+
+  // Re-run on every page entry — Hero lives in the swapped <main> slot, so a
+  // fresh blank canvas replaces the old one on each home visit; tear the
+  // previous spark field down first so its listeners/rAF don't stack up.
+  const win = window as unknown as { __heroTeardown?: () => void };
+
+  function initHero() {
+    win.__heroTeardown?.();
+
+    const palBtn = document.getElementById("pal-sprite-btn");
+    const palImg = document.getElementById("pal-sprite-img") as HTMLImageElement | null;
+    const popupTextEl = document.getElementById("pal-popup-text");
+    const fireworkCanvas = document.getElementById("pal-firework-canvas") as HTMLCanvasElement | null;
+    const sparks = fireworkCanvas ? createSparkField(fireworkCanvas) : null;
+
+    let currentSpriteIndex = 0;
+    let popupTimeout: ReturnType<typeof setTimeout> | null = null;
+
+    palBtn?.addEventListener("click", () => {
+      let nextIndex;
+      do {
+        nextIndex = Math.floor(Math.random() * palSprites.length);
+      } while (nextIndex === currentSpriteIndex && palSprites.length > 1);
+      currentSpriteIndex = nextIndex;
+      if (palImg) palImg.src = palSprites[currentSpriteIndex];
+
+      if (popupTextEl) {
+        if (popupTimeout) clearTimeout(popupTimeout);
+        popupTextEl.textContent = popupTexts[Math.floor(Math.random() * popupTexts.length)];
+        popupTextEl.style.opacity = "1";
+        popupTimeout = setTimeout(() => {
+          popupTextEl.style.opacity = "0";
+        }, 1250);
+      }
+
+      const rect = palBtn.getBoundingClientRect();
+      sparks?.burst(rect.left + rect.width / 2, rect.top + rect.height / 2);
+    });
+
+    win.__heroTeardown = () => sparks?.destroy();
+  }
+
+  document.addEventListener("astro:page-load", initHero);
+</script>

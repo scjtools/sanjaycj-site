@@ -1,0 +1,74 @@
+---
+import { footer } from "../data/site";
+import { socialIcons } from "../data/icons";
+---
+
+<div
+  id="contact-modal"
+  transition:persist
+  class="fixed inset-0 z-[100] hidden items-center justify-center bg-black/50 backdrop-blur p-4"
+>
+  <div class="w-full max-w-sm border border-hairline-strong bg-bg p-8 text-center">
+    <img
+      src="/sprites/hero-pal-01.png"
+      alt="Pixel-art mascot"
+      width="80"
+      height="80"
+      class="pixelated mx-auto mb-6 w-20"
+    />
+
+    <h2 class="font-pixel mb-8 text-2xl">Contact Me</h2>
+
+    <div class="space-y-4 text-left">
+      {footer.links.map((link) => (
+        <a
+          href={link.href}
+          target={link.href.startsWith("http") ? "_blank" : undefined}
+          rel={link.href.startsWith("http") ? "noopener noreferrer" : undefined}
+          class="flex items-center gap-3 border border-hairline px-4 py-3 transition-colors hover:border-ink hover:bg-surface"
+        >
+          <svg
+            width="20"
+            height="20"
+            viewBox="0 0 24 24"
+            fill="currentColor"
+            class="flex-shrink-0"
+          >
+            <path d={socialIcons[link.icon]} />
+          </svg>
+          <span class="text-sm">{link.label}</span>
+        </a>
+      ))}
+    </div>
+
+    <button
+      id="close-contact-modal"
+      type="button"
+      class="mt-6 text-xs text-ink-mute hover:text-ink"
+    >
+      close
+    </button>
+  </div>
+</div>
+
+<script>
+  const modal = document.getElementById("contact-modal");
+  const closeBtn = document.getElementById("close-contact-modal");
+
+  function openContactModal() {
+    modal?.classList.remove("hidden");
+    modal?.classList.add("flex");
+  }
+
+  function closeContactModal() {
+    modal?.classList.add("hidden");
+    modal?.classList.remove("flex");
+  }
+
+  closeBtn?.addEventListener("click", closeContactModal);
+  modal?.addEventListener("click", (e) => {
+    if (e.target === modal) closeContactModal();
+  });
+
+  window.openContactModal = openContactModal;
+</script>

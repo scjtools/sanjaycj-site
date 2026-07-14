@@ -1,0 +1,87 @@
+---
+import type { Project } from "../data/workshop";
+import { statusLabel, getProgressLabel } from "../data/workshop";
+import HalftonePattern from "./HalftonePattern.astro";
+
+interface Props {
+  project: Project;
+  index: number;
+}
+
+const { project, index } = Astro.props;
+const Tag = project.url ? "a" : "div";
+const linkProps = project.url
+  ? { href: project.url, target: "_blank", rel: "noopener noreferrer" }
+  : {};
+
+const no = String(index + 1).padStart(3, "0");
+const buildPct = project.progress ?? (project.status === "live" ? 100 : project.status === "prototype" ? 60 : 0);
+const buildLabel = getProgressLabel(buildPct);
+
+// Tag chips; dots cycle red → green → blue left-to-right.
+const dotColors = ["bg-red", "bg-green", "bg-blue"];
+---
+
+<Tag
+  data-status={project.status}
+  class="group relative block border-2 border-ink bg-bg p-1"
+  {...linkProps}
+>
+  <div class="border border-hairline p-4">
+    <div class="flex items-center justify-between">
+      <span class="font-pixel font-semibold text-sm text-ink" style="text-shadow: 2px 2px 0 #0b0e14, -2px -2px 0 #0b0e14, 2px -2px 0 #0b0e14, -2px 2px 0 #0b0e14, 0 2px 0 #0b0e14, 0 -2px 0 #0b0e14, 2px 0 0 #0b0e14, -2px 0 0 #0b0e14;">No. {no}</span>
+      <span
+        class:list={[
+          "eyebrow font-pixel text-xs flex items-center gap-1.5 whitespace-nowrap border px-2 py-1",
+          project.status === "live" ? "border-accent/40 text-accent" : "border-hairline text-ink-mute",
+        ]}
+      >
+        {project.status === "live" && <span class="h-1.5 w-1.5 bg-accent" />}
+        {statusLabel[project.status]}
+      </span>
+    </div>
+
+    {project.sprite && (
+      <div class="relative mt-3 flex items-center justify-center border-2 border-hairline-strong bg-bg py-4 transition-colors group-hover:border-accent/50">
+        {/* Scoped pixel field behind the sprite, denser than the page bg. */}
+        <HalftonePattern class="pointer-events-none" showSkyline={false} density={0.08} />
+        {/* Separate scale wrapper so the hover pop doesn't fight the img's float. */}
+        <div class="relative z-10 origin-[50%_35%] transition-transform duration-200 ease-out group-hover:z-30 group-hover:scale-125">
+          <img
+            src={project.sprite}
+            alt=""
+            aria-hidden="true"
+            width="64"
+            height="64"
+            loading="lazy"
+            class="sprite-float pixelated w-[70px]"
+            style={`--sprite-tilt:-3deg;--sprite-delay:${index * 0.5}s`}
+          />
+        </div>
+      </div>
+    )}
+
+    <h3 class="mt-3 text-center font-pixel text-2xl">{project.name}</h3>
+
+    <div class="mt-2 flex flex-wrap justify-center gap-1.5">
+      {project.tags.map((label, i) => (
+        <span class="font-pixel flex items-center gap-1 border border-hairline px-1.5 py-0.5 text-xs uppercase tracking-wide text-ink-mute">
+          <span class:list={["h-1.5 w-1.5", dotColors[i % dotColors.length]]} />
+          {label}
+        </span>
+      ))}
+    </div>
+
+    <p class="mt-3 text-sm leading-relaxed text-ink-mute">{project.description}</p>
+
+    <div class="mt-4">
+      <div class="font-pixel flex items-center justify-between text-xs uppercase tracking-wide text-ink-mute">
+        <span>{buildLabel}</span>
+        <span>{buildPct}%</span>
+      </div>
+      <div class="pixel-bar mt-1">
+        <div class="pixel-bar-fill" style={`width:${buildPct}%`} />
+      </div>
+    </div>
+  </div>
+</Tag>

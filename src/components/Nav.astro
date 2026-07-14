@@ -1,0 +1,134 @@
+---
+import { site, nav } from "../data/site";
+
+const path = Astro.url.pathname;
+const isActive = (href: string) => path === href || (href !== "/" && path.startsWith(href));
+---
+
+<header class="sticky top-0 z-50 border-b border-hairline bg-bg/95 backdrop-blur">
+  <div class="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3 sm:px-6">
+    <a
+      href="/"
+      class="pixel-btn font-pixel flex h-9 items-center justify-center bg-bg px-3 text-sm"
+      aria-label={`${site.name} — home`}
+    >
+      sanjaycj.com
+    </a>
+
+    <nav aria-label="Primary" class="hidden items-center gap-2 md:flex">
+      {nav.map((item) => (
+        <a
+          href={item.href}
+          aria-current={isActive(item.href) ? "page" : undefined}
+          class:list={[
+            "font-pixel border px-3 py-1.5 text-sm transition-colors",
+            isActive(item.href)
+              ? "border-ink bg-surface text-ink"
+              : "border-hairline text-ink-mute hover:border-ink hover:bg-surface hover:text-ink",
+          ]}
+        >
+          {item.label}
+        </a>
+      ))}
+    </nav>
+
+    <div class="hidden md:block">
+      <button
+        type="button"
+        id="nav-contact-btn"
+        class="pixel-btn-accent pixel-btn font-pixel bg-accent px-4 py-1.5 text-sm text-bg"
+      >
+        Contact me
+      </button>
+    </div>
+
+    <button
+      id="nav-toggle"
+      type="button"
+      class="pixel-btn flex h-9 w-9 items-center justify-center bg-bg md:hidden"
+      aria-expanded="false"
+      aria-controls="mobile-nav"
+      aria-label="Toggle navigation menu"
+    >
+      <svg id="nav-icon-open" width="16" height="16" viewBox="0 0 16 16" fill="none">
+        <path d="M1 4H15M1 8H15M1 12H15" stroke="currentColor" stroke-width="1.5" />
+      </svg>
+      <svg id="nav-icon-close" width="16" height="16" viewBox="0 0 16 16" fill="none" class="hidden">
+        <path d="M2 2L14 14M14 2L2 14" stroke="currentColor" stroke-width="1.5" />
+      </svg>
+    </button>
+  </div>
+
+  <nav
+    id="mobile-nav"
+    aria-label="Mobile"
+    class="hidden flex-col gap-2 border-t border-hairline px-4 py-3 md:hidden"
+  >
+    {nav.map((item) => (
+      <a
+        href={item.href}
+        aria-current={isActive(item.href) ? "page" : undefined}
+        class:list={[
+          "font-pixel border px-3 py-2.5 text-center text-sm",
+          isActive(item.href) ? "border-ink bg-surface text-ink" : "border-hairline",
+        ]}
+      >
+        {item.label}
+      </a>
+    ))}
+    <button
+      type="button"
+      id="mobile-contact-btn"
+      class="pixel-btn-accent pixel-btn font-pixel bg-accent px-4 py-2.5 text-center text-sm text-bg"
+    >
+      Contact me
+    </button>
+  </nav>
+</header>
+
+<script>
+  // Header isn't transition:persist'd (active-link state is per-route), so a
+  // fresh <header> is swapped in on each navigation — re-bind on page-load.
+  function initNav() {
+    const toggle = document.getElementById("nav-toggle");
+    const panel = document.getElementById("mobile-nav");
+    const iconOpen = document.getElementById("nav-icon-open");
+    const iconClose = document.getElementById("nav-icon-close");
+    const navContactBtn = document.getElementById("nav-contact-btn");
+    const mobileContactBtn = document.getElementById("mobile-contact-btn");
+
+    function openContactModal() {
+      if (window.openContactModal) window.openContactModal();
+    }
+
+    navContactBtn?.addEventListener("click", openContactModal);
+    mobileContactBtn?.addEventListener("click", () => {
+      openContactModal();
+      panel?.classList.add("hidden");
+      panel?.classList.remove("flex");
+      iconOpen?.classList.remove("hidden");
+      iconClose?.classList.add("hidden");
+      toggle?.setAttribute("aria-expanded", "false");
+    });
+
+    toggle?.addEventListener("click", () => {
+      const isOpen = panel?.classList.toggle("flex");
+      panel?.classList.toggle("hidden");
+      iconOpen?.classList.toggle("hidden");
+      iconClose?.classList.toggle("hidden");
+      toggle.setAttribute("aria-expanded", String(Boolean(isOpen)));
+    });
+
+    panel?.querySelectorAll("a").forEach((link) => {
+      link.addEventListener("click", () => {
+        panel.classList.add("hidden");
+        panel.classList.remove("flex");
+        iconOpen?.classList.remove("hidden");
+        iconClose?.classList.add("hidden");
+        toggle?.setAttribute("aria-expanded", "false");
+      });
+    });
+  }
+
+  document.addEventListener("astro:page-load", initNav);
+</script>

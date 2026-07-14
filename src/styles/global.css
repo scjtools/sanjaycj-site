@@ -1,0 +1,148 @@
+@import "tailwindcss";
+@import "@fontsource/jetbrains-mono/400.css";
+@import "@fontsource/jetbrains-mono/600.css";
+@import "@fontsource/pixelify-sans/500.css";
+@import "@fontsource/pixelify-sans/600.css";
+
+@theme {
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --font-pixel: "Pixelify Sans", "JetBrains Mono", monospace;
+
+  /* Dark canvas + RGB accent trio from the Palette Pals mascot's lights. */
+  --color-bg: #0b0e14;
+  --color-surface: #151824;
+  --color-ink: #e9e7dd;
+  --color-ink-mute: #8b8fa3;
+  --color-hairline: rgb(233 231 221 / 14%);
+  --color-hairline-strong: rgb(233 231 221 / 28%);
+
+  --color-accent: #acd6f6;
+  --color-red: #e8433a;
+  --color-green: #3ed68c;
+  --color-blue: #55aaff;
+}
+
+@layer base {
+  html {
+    background-color: var(--color-bg);
+    color: var(--color-ink);
+    font-family: var(--font-mono);
+    -webkit-font-smoothing: antialiased;
+    /* Reserve scrollbar width so centered containers don't shift per-page. */
+    scrollbar-gutter: stable;
+  }
+
+  body {
+    min-height: 100dvh;
+  }
+
+  ::selection {
+    background-color: var(--color-accent);
+    color: var(--color-bg);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+  }
+}
+
+@layer utilities {
+  .eyebrow {
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .font-pixel {
+    font-family: var(--font-pixel);
+  }
+
+  .pixelated {
+    image-rendering: pixelated;
+  }
+
+  .bg-hatch {
+    background-image: repeating-linear-gradient(
+      -45deg,
+      rgb(233 231 221 / 4%),
+      rgb(233 231 221 / 4%) 1px,
+      transparent 1px,
+      transparent 7px
+    );
+  }
+
+  /* Hard-edged pixel button: solid offset shadow, presses flat on click. */
+  .pixel-btn {
+    border: 2px solid var(--color-ink);
+    box-shadow: 4px 4px 0 0 var(--color-ink);
+    transition:
+      transform 0.1s steps(2),
+      box-shadow 0.1s steps(2);
+  }
+
+  .pixel-btn:hover {
+    transform: translate(2px, 2px);
+    box-shadow: 2px 2px 0 0 var(--color-ink);
+  }
+
+  .pixel-btn:active {
+    transform: translate(4px, 4px);
+    box-shadow: 0 0 0 0 var(--color-ink);
+  }
+
+  .pixel-btn-accent {
+    border-color: var(--color-bg);
+    box-shadow: 4px 4px 0 0 var(--color-bg);
+  }
+
+  .pixel-btn-accent:hover {
+    box-shadow: 2px 2px 0 0 var(--color-bg);
+  }
+
+  .pixel-btn-accent:active {
+    box-shadow: 0 0 0 0 var(--color-bg);
+  }
+
+  /* Segmented pixel loading bar. */
+  .pixel-bar {
+    height: 14px;
+    border: 2px solid var(--color-ink-mute);
+    background: var(--color-surface);
+    padding: 2px;
+  }
+
+  .pixel-bar-fill {
+    height: 100%;
+    background-image: repeating-linear-gradient(
+      90deg,
+      var(--color-accent),
+      var(--color-accent) 6px,
+      color-mix(in srgb, var(--color-accent) 70%, black) 6px,
+      color-mix(in srgb, var(--color-accent) 70%, black) 8px
+    );
+    transition: width 0.6s steps(12);
+  }
+
+  @keyframes sprite-float {
+    0%,
+    100% {
+      transform: translateY(0) rotate(var(--sprite-tilt, -6deg));
+    }
+    50% {
+      transform: translateY(-8px) rotate(var(--sprite-tilt, -6deg));
+    }
+  }
+
+  .sprite-float {
+    animation: sprite-float 4.5s ease-in-out infinite;
+    animation-delay: var(--sprite-delay, 0s);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .sprite-float {
+      animation: none;
+    }
+  }
+}

@@ -1,0 +1,99 @@
+---
+import { projects, statusLabel, type ProjectStatus } from "../data/workshop";
+import ProjectCard from "./ProjectCard.astro";
+import HalftonePattern from "./HalftonePattern.astro";
+
+const shipped = projects.filter((p) => p.status !== "idea");
+const queued = projects.filter((p) => p.status === "idea");
+
+const statuses = Array.from(new Set(shipped.map((p) => p.status))) as ProjectStatus[];
+const filters: { key: ProjectStatus | "all"; label: string }[] = [
+  { key: "all", label: "All" },
+  ...statuses.map((s) => ({ key: s, label: statusLabel[s] })),
+];
+---
+
+<section id="projects" class="relative overflow-hidden border-t border-hairline bg-hatch">
+  <HalftonePattern class="pointer-events-none" showSkyline={false} />
+
+  <div class="relative z-10 mx-auto max-w-6xl px-4 py-16 sm:px-6 sm:py-20">
+    <div class="flex flex-wrap items-end justify-between gap-4">
+      <h2 class="font-pixel text-3xl tracking-tight sm:text-4xl">Welcome to my workshop</h2>
+
+      <div id="project-filters" class="flex flex-wrap gap-2">
+        {filters.map((f, i) => (
+          <button
+            type="button"
+            data-filter={f.key}
+            class:list={[
+              "font-pixel border px-3 py-1.5 text-xs uppercase tracking-wide transition-colors",
+              i === 0 ? "border-ink bg-ink text-bg" : "border-hairline hover:border-ink",
+            ]}
+            aria-pressed={i === 0 ? "true" : "false"}
+          >
+            {f.label}
+          </button>
+        ))}
+      </div>
+    </div>
+
+    <div id="project-grid" class="mt-10 grid gap-4 sm:grid-cols-2">
+      {shipped.map((project, i) => (
+        <ProjectCard project={project} index={i} />
+      ))}
+    </div>
+
+    <div class="mt-16">
+      <h3 class="font-pixel text-3xl tracking-tight sm:text-4xl">Coming soon...</h3>
+      <div class="mt-6 flex flex-wrap gap-2.5">
+        {queued.map((idea) => (
+          <span
+            class="border border-dashed border-hairline-strong px-3 py-2 text-sm text-ink-mute transition-colors hover:border-accent hover:text-ink"
+            title={idea.description}
+          >
+            {idea.name}
+          </span>
+        ))}
+      </div>
+    </div>
+  </div>
+</section>
+
+<script>
+  function initProjectFilters() {
+    const filterBar = document.getElementById("project-filters");
+    const grid = document.getElementById("project-grid");
+    if (!filterBar || !grid) return;
+
+    function applyFilter(filter: string | undefined) {
+      grid!.querySelectorAll<HTMLElement>("[data-status]").forEach((card) => {
+        const show = filter === "all" || card.dataset.status === filter;
+        card.style.display = show ? "" : "none";
+      });
+    }
+
+    function setActive(btn: HTMLButtonElement) {
+      filterBar!.querySelectorAll("button").forEach((b) => {
+        const active = b === btn;
+        b.setAttribute("aria-pressed", String(active));
+        b.classList.toggle("border-ink", active);
+        b.classList.toggle("bg-ink", active);
+        b.classList.toggle("text-bg", active);
+        b.classList.toggle("border-hairline", !active);
+      });
+    }
+
+    filterBar.addEventListener("click", (e) => {
+      const btn = (e.target as HTMLElement).closest<HTMLButtonElement>("button[data-filter]");
+      if (!btn) return;
+      setActive(btn);
+      applyFilter(btn.dataset.filter);
+    });
+
+    // Apply the initially-active filter (All)
+    const initialBtn = filterBar.querySelector<HTMLButtonElement>('button[aria-pressed="true"]');
+    if (initialBtn) applyFilter(initialBtn.dataset.filter);
+  }
+
+  document.addEventListener("astro:page-load", initProjectFilters);
+</script>

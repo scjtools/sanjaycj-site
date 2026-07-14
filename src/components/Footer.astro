@@ -1,0 +1,25 @@
+---
+import { footer } from "../data/site";
+import { socialIcons } from "../data/icons";
+---
+
+<footer class="border-t border-hairline" transition:persist>
+  <div class="mx-auto flex max-w-6xl items-center justify-center px-4 py-10 sm:px-6">
+    <div class="flex items-center gap-3">
+      {footer.links.map((l) => (
+        <a
+          href={l.href}
+          target={l.href.startsWith("http") ? "_blank" : undefined}
+          rel={l.href.startsWith("http") ? "noopener noreferrer" : undefined}
+          aria-label={l.label}
+          title={l.label}
+          class="pixel-btn flex h-11 w-11 items-center justify-center bg-bg transition-colors hover:bg-surface"
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+            <path d={socialIcons[l.icon]} />
+          </svg>
+        </a>
+      ))}
+    </div>
+  </div>
+</footer>

@@ -1,0 +1,15 @@
+# Sanjay Joshi
+
+> Auditor, engineer, and builder based in Mauritius. I have expertise in audit and finance, and build digital tools that solve everyday problems.
+
+## Pages
+
+- [Home](https://sanjaycj.com/): Introduction and links into the workshop.
+- [About](https://sanjaycj.com/about/): Background, experience, and education.
+- [Workshop](https://sanjaycj.com/workshop/): Projects — shipped, in progress, and planned.
+
+## Projects
+
+- [4minit Daily News](https://4minit.xyz): A free automated newsletter delivering Mauritius news in English to over 200 inboxes every morning.
+- [4minit Insights](https://4minit.xyz/insights): Mauritius open data made interactive — explore trends, compare, and export shareable charts.
+- [0xguessr](https://0xguessr.vercel.app/): A slot-machine web game that "guesses" Ethereum private keys.

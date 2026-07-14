@@ -1,0 +1,1048 @@
+---
+// Full-bleed interactive pixel field: a sparse star scatter, a low-rise
+// "background city" filling the canvas width, and a KL skyline of named
+// landmarks rising above it. Mouse repels nearby pixels and leaves spark
+// trails; physics runs client-side (see script). Landmarks sit at fixed
+// offsets from centre and drop out whole when they don't fit; the filler
+// city regenerates to the canvas width every resize.
+interface Props {
+  class?: string;
+  showSkyline?: boolean;
+  showFiller?: boolean;
+  showAmbient?: boolean;
+  /** Custom building set drawn instead of the default skyline (e.g. the
+   * About page's country silhouettes). */
+  buildings?: { x0: number; grid: string[] }[];
+  /** Scale the skyline to fit the width instead of dropping overflow. */
+  fit?: boolean;
+  /** Fraction of cells that become ambient particles (default 0.02). */
+  density?: number;
+}
+
+const {
+  class: className = "",
+  showSkyline = true,
+  showFiller = showSkyline,
+  showAmbient = true,
+  buildings,
+  fit = false,
+  density,
+} = Astro.props;
+---
+
+<canvas
+  class={`absolute inset-0 h-full w-full pixelated ${className}`}
+  data-halftone
+  data-skyline={showSkyline ? "true" : "false"}
+  data-filler={showFiller ? "true" : "false"}
+  data-ambient={showAmbient ? "true" : "false"}
+  data-fit={fit ? "true" : "false"}
+  data-density={density !== undefined ? String(density) : undefined}
+  data-buildings={buildings ? JSON.stringify(buildings) : undefined}
+  aria-hidden="true"
+></canvas>
+
+<script>
+  interface Particle {
+    ox: number;
+    oy: number;
+    x: number;
+    y: number;
+    vx: number;
+    vy: number;
+    size: number;
+    color: string;
+  }
+
+  interface Spark {
+    x: number;
+    y: number;
+    vx: number;
+    vy: number;
+    age: number;
+    life: number;
+    size: number;
+    color: string;
+  }
+
+  interface Rig {
+    canvas: HTMLCanvasElement;
+    ctx: CanvasRenderingContext2D;
+    w: number;
+    h: number;
+    particles: Particle[];
+    sparks: Spark[];
+    lastSparkX: number;
+    lastSparkY: number;
+    visible: boolean;
+  }
+
+  function hash(x: number, y: number) {
+    const n = Math.sin(x * 127.1 + y * 311.7) * 43758.5453123;
+    return n - Math.floor(n);
+  }
+
+  // Randomly scattered stars; count scales with area × threshold (density).
+  function buildAmbient(w: number, h: number, colors: string[], threshold = 0.02): Particle[] {
+    const cell = 12;
+    const count = Math.round((w / cell) * (h / cell) * threshold);
+
+    const particles: Particle[] = [];
+    for (let i = 0; i < count; i++) {
+      const cx = Math.random() * w;
+      const cy = Math.random() * h;
+      const roll = Math.random();
+      const color = roll < 0.08 ? colors[1] : roll < 0.16 ? colors[2] : roll < 0.24 ? colors[3] : colors[0];
+      const size = 2 + Math.round(Math.random() * 3);
+      particles.push({ ox: cx, oy: cy, x: cx, y: cy, vx: 0, vy: 0, size, color });
+    }
+    return particles;
+  }
+
+  // Pixel-art grid ('#' filled, '.' empty), bottom row on the ground line.
+  // `x0` is the grid's left-edge offset from canvas-centre (in px).
+  interface Building {
+    x0: number;
+    grid: string[];
+  }
+
+  const SKY_CELL = 5;
+  const SKY_GROUND_MARGIN = 0;
+
+  // St. Mary's Cathedral — Gothic tower + spire beside a lower nave.
+  const ST_MARYS: Building = {
+    x0: -1052,
+    grid: [
+      "...#..........",
+      "...#..........",
+      "..###.........",
+      "..###.........",
+      "#.###.#.......",
+      "#######.......",
+      "#######.......",
+      "#######.......",
+      "#######.......",
+      "#######.......",
+      "#######.......",
+      "#######..####.",
+      "#######.######",
+      "##############",
+      "##############",
+      "##############",
+      "##############",
+    ],
+  };
+
+  // Sultan Abdul Samad Building — clock tower + domes over an arcaded facade.
+  const SULTAN_ABDUL_SAMAD: Building = {
+    x0: -692,
+    grid: [
+      "...............##...............",
+      "..............####..............",
+      ".............######.............",
+      "..............####..............",
+      "....#.........#..#.........#....",
+      "...##.........#..#.........##...",
+      "..####........####........####..",
+      "...##.........####.........##...",
+      "...##.........####.........##...",
+      "...##.........####.........##...",
+      "################################",
+      "#.##.##.##.##########.##.##.##.#",
+      "####.####.####.##.####.####.####",
+      ".##############################.",
+      ".##############################.",
+      ".##############################.",
+    ],
+  };
+
+  // Masjid Jamek — twin minarets flanking three onion domes.
+  const MASJID_JAMEK: Building = {
+    x0: -482,
+    grid: [
+      "..#................#..",
+      ".###..............###.",
+      "..##..............##..",
+      "..##..............##..",
+      "..##......##......##..",
+      "..##.....####.....##..",
+      "..##....######....##..",
+      "..##.##.######.##.##..",
+      ".####################.",
+      ".####################.",
+      "######################",
+      "######################",
+      "######################",
+    ],
+  };
+
+  // Central Market — low Art Deco hall with a stepped central parapet.
+  const CENTRAL_MARKET: Building = {
+    x0: -207,
+    grid: [
+      "........####........",
+      "........####........",
+      "......########......",
+      "#.#.#.########.#.#.#",
+      "####################",
+      "####################",
+      "####################",
+      "####################",
+      "####################",
+      "####################",
+      "####################",
+      "####################",
+    ],
+  };
+
+  // Batu Caves — the Murugan statue: raised arm with a vel, dhoti, plinth.
+  const BATU_CAVES: Building = {
+    x0: -1162,
+    grid: [
+      ".#........",
+      ".#........",
+      ".#...#....",
+      ".#...##...",
+      "##...##...",
+      ".#..#####.",
+      ".#.#######",
+      "..#.######",
+      "....####.#",
+      ".....###.#",
+      ".....####.",
+      ".....###..",
+      ".....###..",
+      "....##.##.",
+      "....##.##.",
+      "....##.##.",
+      "....##.##.",
+      "##########",
+      "##########",
+      "##########",
+    ],
+  };
+
+  // KL Railway Station — low, wide colonnade with four modest towers.
+  const KL_STATION: Building = {
+    x0: -922,
+    grid: [
+      "..#........#..........#........#..",
+      "..#........#..........#........#..",
+      "..#........#..........#........#..",
+      "..#........#..........#........#..",
+      "..#........#..........#........#..",
+      "..#........#..........#........#..",
+      "..#........#..........#........#..",
+      "..#........#..........#........#..",
+      "..#........#..........#........#..",
+      "..#........#..........#........#..",
+      ".###......###........###......###.",
+      ".###......###........###......###.",
+      "....#####...#####.#####...#####...",
+      "...#######.#############.#######..",
+      "..###############################.",
+      "##################################",
+      "##################################",
+      "##################################",
+      "##################################",
+      "##################################",
+      "##################################",
+      "##################################",
+      "##################################",
+    ],
+  };
+
+  // KL Tower — thin mast with an observation pod near the top.
+  const KL_TOWER: Building = {
+    x0: -312,
+    grid: [
+      "....#....",
+      "....#....",
+      "....#....",
+      "....#....",
+      "....#....",
+      "....#....",
+      "....#....",
+      "....#....",
+      "...###...",
+      "...###...",
+      ".#######.",
+      "#########",
+      "#########",
+      ".#######.",
+      "..#####..",
+      "...###...",
+      "...###...",
+      "...###...",
+      "...###...",
+      "...###...",
+      "...###...",
+      "...###...",
+      "...###...",
+      "...###...",
+      "...###...",
+      "...###...",
+      "...###...",
+      "...###...",
+      "...###...",
+      "...###...",
+      "...###...",
+      "...###...",
+      "...###...",
+      "...###...",
+      "...###...",
+      "...###...",
+      "...###...",
+      "..#####..",
+      ".#######.",
+      "#########",
+      "#########",
+      "#########",
+    ],
+  };
+
+  // Petronas Twin Towers — the anchor at offset 0; twin shafts + skybridge.
+  const PETRONAS: Building = {
+    x0: -47,
+    grid: [
+      "...#...........#...",
+      "...#...........#...",
+      "...#...........#...",
+      "...#...........#...",
+      "...#...........#...",
+      "...#...........#...",
+      "...#...........#...",
+      "...#...........#...",
+      "..###.........###..",
+      "..###.........###..",
+      "..###.........###..",
+      "..###.........###..",
+      "..###.........###..",
+      "..###.........###..",
+      "..###.........###..",
+      ".#####.......#####.",
+      ".#####.......#####.",
+      ".#####.......#####.",
+      ".#####.......#####.",
+      ".#####.......#####.",
+      ".#####.......#####.",
+      ".#####.......#####.",
+      ".#####.......#####.",
+      "#######.....#######",
+      "#######.....#######",
+      "#######.....#######",
+      "#######.....#######",
+      "#######.....#######",
+      "#######.....#######",
+      "###################",
+      "###################",
+      "#######..#..#######",
+      "#######.#.#.#######",
+      "########...########",
+      "#######.....#######",
+      "#######.....#######",
+      "#######.....#######",
+      "#######.....#######",
+      "#######.....#######",
+      "#######.....#######",
+      "#######.....#######",
+      "#######.....#######",
+      "#######.....#######",
+      "#######.....#######",
+      "#######.....#######",
+      "#######.....#######",
+      "#######.....#######",
+      "#######.....#######",
+      "###################",
+      "###################",
+    ],
+  };
+
+  // Menara TM — curved "sail" shaft with a saucer disc near the top.
+  const MENARA_TM: Building = {
+    x0: 288,
+    grid: [
+      "....#..........",
+      "....##.........",
+      "....###........",
+      "....###........",
+      "....####.......",
+      "....####.......",
+      "....#####......",
+      "....########...",
+      "....#######....",
+      "....######.....",
+      "....######.....",
+      "....#######....",
+      "....#######....",
+      "...########....",
+      "...#########...",
+      "...#########...",
+      "...#########...",
+      "...#########...",
+      "..##########...",
+      "..###########..",
+      "..###########..",
+      "..###########..",
+      "..###########..",
+      ".############..",
+      ".#############.",
+      ".#############.",
+      ".#############.",
+      ".#############.",
+      "##############.",
+      "###############",
+      "###############",
+      "###############",
+    ],
+  };
+
+  // Merdeka 118 — tall needle spire over a slender faceted body.
+  const MERDEKA_118: Building = {
+    x0: 408,
+    grid: [
+      ".#.......",
+      ".#.......",
+      ".#.......",
+      ".#.......",
+      ".#.......",
+      ".#.......",
+      ".#.......",
+      ".#.......",
+      ".#.......",
+      ".#.......",
+      ".#.......",
+      ".#.......",
+      ".##......",
+      ".##......",
+      ".##......",
+      "####.....",
+      "########.",
+      "########.",
+      "#######..",
+      "#######..",
+      "#######..",
+      ".#######.",
+      "########.",
+      "########.",
+      "########.",
+      "########.",
+      "#######..",
+      "#######..",
+      "#######..",
+      ".######..",
+      "#######..",
+      "#######..",
+      "#######..",
+      "########.",
+      "########.",
+      "#######..",
+      "#######..",
+      "#######..",
+      ".#######.",
+      "########.",
+      "#######..",
+      "#######..",
+      "########.",
+      "########.",
+      "#######..",
+      "#######..",
+      "########.",
+      ".#######.",
+      "########.",
+      "########.",
+      "########.",
+      "##########",
+      "##########",
+      "##########",
+      "##########",
+      "##########",
+    ],
+  };
+
+  // TRX / Exchange 106 — monolithic shaft with a flared lattice crown.
+  const TRX: Building = {
+    x0: 668,
+    grid: [
+      "...####...",
+      "...##.#...",
+      "...#.##...",
+      "...####...",
+      "...####...",
+      "..######..",
+      "..######..",
+      "..######..",
+      "..######..",
+      "..######..",
+      "..######..",
+      "..######..",
+      "..######..",
+      "..######..",
+      "..######..",
+      "..######..",
+      "..######..",
+      "..######..",
+      "..######..",
+      "..######..",
+      "..######..",
+      "..######..",
+      ".########.",
+      ".########.",
+      ".########.",
+      ".########.",
+      ".########.",
+      ".########.",
+      ".########.",
+      ".########.",
+      ".########.",
+      ".########.",
+      "##########",
+      "##########",
+      "##########",
+      "##########",
+      "##########",
+      "##########",
+      "##########",
+      "##########",
+    ],
+  };
+
+  // Thean Hou Temple — stacked-pagoda roofs with a finial on a base hall.
+  const THEAN_HOU: Building = {
+    x0: 783,
+    grid: [
+      "............##............",
+      "..........######..........",
+      "...........####...........",
+      "........##########........",
+      "..........######..........",
+      "......##############......",
+      ".........########.........",
+      "....##################....",
+      "........##########........",
+      "..######################..",
+      ".......############.......",
+      "##########################",
+      "...####################...",
+      "...####################...",
+      "...####################...",
+      "...####################...",
+      "...####################...",
+      "...####################...",
+      "...####################...",
+      "##########################",
+      "##########################",
+      "##########################",
+      "##########################",
+    ],
+  };
+
+  // Dayabumi Complex — rectangular shaft textured with recessed arch notches.
+  const DAYABUMI: Building = {
+    x0: 1133,
+    grid: [
+      "..#####..",
+      ".#######.",
+      "..#####..",
+      ".#######.",
+      "..#####..",
+      ".#######.",
+      "..#####..",
+      ".#######.",
+      "..#####..",
+      ".#######.",
+      "..#####..",
+      ".#######.",
+      "..#####..",
+      ".#######.",
+      "#########",
+      "#########",
+      "#########",
+      "#########",
+    ],
+  };
+
+  // National Museum — Minangkabau roof with horn-tipped ends on a low hall.
+  const NATIONAL_MUSEUM: Building = {
+    x0: 108,
+    grid: [
+      "#......................#",
+      "##....................##",
+      "###..................###",
+      "#####..............#####",
+      "#######..........#######",
+      "##########....##########",
+      "########################",
+      "########################",
+      ".######################.",
+      ".######################.",
+      ".######################.",
+      "########################",
+      "########################",
+    ],
+  };
+
+  // Sri Mahamariamman — a gopuram: stepped pyramid widening tier by tier.
+  const SRI_MAHAMARIAMMAN: Building = {
+    x0: 528,
+    grid: [
+      "......#.#.#.....",
+      ".....######.....",
+      "......####......",
+      ".....######.....",
+      "......####......",
+      ".....######.....",
+      "....########....",
+      ".....######.....",
+      "....########....",
+      "...##########...",
+      "....########....",
+      "...##########...",
+      "..############..",
+      "...##########...",
+      "..############..",
+      ".##############.",
+      "..############..",
+      ".##############.",
+      "################",
+      ".##############.",
+      "################",
+      "################",
+      "################",
+    ],
+  };
+
+  // Istana Negara — palace gate: crescent finial over a shallow dome.
+  const ISTANA_NEGARA: Building = {
+    x0: 973,
+    grid: [
+      ".........##.........",
+      ".........##.........",
+      ".......######.......",
+      ".....##########.....",
+      "...##############...",
+      "....############....",
+      "..################..",
+      "####################",
+      "####################",
+      "####################",
+      "####################",
+      "####################",
+      "####################",
+    ],
+  };
+
+  const ALL_BUILDINGS: Building[] = [
+    BATU_CAVES,
+    ST_MARYS,
+    KL_STATION,
+    SULTAN_ABDUL_SAMAD,
+    CENTRAL_MARKET,
+    KL_TOWER,
+    MASJID_JAMEK,
+    PETRONAS,
+    NATIONAL_MUSEUM,
+    MENARA_TM,
+    MERDEKA_118,
+    SRI_MAHAMARIAMMAN,
+    TRX,
+    THEAN_HOU,
+    ISTANA_NEGARA,
+    DAYABUMI,
+  ];
+
+  function buildingExtent(b: Building): [number, number] {
+    return [b.x0, b.x0 + b.grid[0].length * SKY_CELL];
+  }
+
+  // Low-rise filler city: plain short buildings packed into the gaps
+  // between landmarks (and the canvas edges), kept below the shortest
+  // landmark so the named buildings read as rising above it.
+  const FILLER_TARGET_W = 16;
+  const FILLER_GAP = 3;
+  const FILLER_MIN_H = 16;
+  const FILLER_MAX_H = 44;
+
+  function visibleBuildings(w: number, list: Building[]): Building[] {
+    const centerX = w / 2;
+    return list.filter((b) => {
+      const [minX, maxX] = buildingExtent(b);
+      return centerX + minX >= 0 && centerX + maxX <= w;
+    });
+  }
+
+  function buildFiller(w: number, h: number, colors: string[], majorRanges: [number, number][]): Particle[] {
+    const groundY = h - SKY_GROUND_MARGIN;
+    const particles: Particle[] = [];
+
+    const sorted = [...majorRanges].sort((a, b) => a[0] - b[0]);
+    const runs: [number, number][] = [];
+    let cursor = 0;
+    for (const [lo, hi] of sorted) {
+      if (lo > cursor) runs.push([cursor, lo]);
+      cursor = Math.max(cursor, hi);
+    }
+    if (w > cursor) runs.push([cursor, w]);
+
+    let seed = 0;
+    for (const [runStart, runEnd] of runs) {
+      const runWidth = runEnd - runStart;
+      if (runWidth <= 4) continue;
+
+      const count = Math.max(1, Math.round(runWidth / FILLER_TARGET_W));
+      const gapTotal = FILLER_GAP * (count - 1);
+      const eachWidth = (runWidth - gapTotal) / count;
+
+      for (let i = 0; i < count; i++) {
+        seed += 1;
+        const bx0 = runStart + i * (eachWidth + FILLER_GAP);
+        const bx1 = bx0 + eachWidth;
+
+        // Skewed toward shorter buildings, with rarer taller outliers.
+        const heightFrac = Math.pow(hash(seed * 2.31, 5.1), 1.8);
+        const heightPx = FILLER_MIN_H + Math.round(heightFrac * (FILLER_MAX_H - FILLER_MIN_H));
+        const rows = Math.round(heightPx / SKY_CELL);
+        const hasStep = hash(seed * 1.7, 9.3) < 0.3;
+
+        for (let r = 0; r < rows; r++) {
+          const inset = r < 2 && hasStep ? SKY_CELL : 0;
+          for (let x = bx0 + inset; x < bx1 - inset; x += SKY_CELL) {
+            const cx = x + SKY_CELL / 2;
+            const cy = groundY - (rows - r) * SKY_CELL + SKY_CELL / 2;
+            if (cy < 0) continue;
+
+            // Per-cell roll (raw position, no quantizing) so lit windows
+            // scatter instead of clumping into streaks.
+            const windowRoll = hash(cx, cy);
+            const isWindow = windowRoll > 0.75 && windowRoll < 0.9;
+            const color = isWindow ? (windowRoll < 0.82 ? colors[1] : windowRoll < 0.86 ? colors[2] : colors[3]) : colors[0];
+            const size = SKY_CELL - 1;
+            particles.push({ ox: cx, oy: cy, x: cx, y: cy, vx: 0, vy: 0, size, color });
+          }
+        }
+      }
+    }
+    return particles;
+  }
+
+  // scale < 1 shrinks the skyline to fit (centred); scale 1 is bottom-aligned.
+  function buildSkyline(w: number, h: number, colors: string[], visible: Building[], scale = 1): Particle[] {
+    const centerX = w / 2;
+    const cell = SKY_CELL * scale;
+    const maxRows = visible.reduce((m, b) => Math.max(m, b.grid.length), 0);
+    const groundY = scale < 1 ? (h + maxRows * cell) / 2 : h - SKY_GROUND_MARGIN;
+
+    const particles: Particle[] = [];
+    for (const b of visible) {
+      const rows = b.grid.length;
+      for (let r = 0; r < rows; r++) {
+        const line = b.grid[r];
+        for (let c = 0; c < line.length; c++) {
+          if (line[c] !== "#") continue;
+
+          const cx = centerX + (b.x0 + c * SKY_CELL + SKY_CELL / 2) * scale;
+          const cy = groundY - (rows - r) * cell + cell / 2;
+          if (cy < 0) continue;
+
+          const grain = hash(Math.round(cx * 0.31), r * 0.71);
+          // Per-cell roll from grid indices (cross terms avoid axis-aligned
+          // streaks) so the coloured cells scatter evenly.
+          const windowRoll = hash(c + r * 0.5, r + c * 0.5);
+          const isWindow = windowRoll > 0.82 && windowRoll < 0.94;
+          const color = isWindow
+            ? windowRoll < 0.87
+              ? colors[1]
+              : windowRoll < 0.91
+                ? colors[2]
+                : colors[3]
+            : colors[0];
+          const size = Math.max(2, Math.round((SKY_CELL - 1 - grain) * scale));
+          particles.push({ ox: cx, oy: cy, x: cx, y: cy, vx: 0, vy: 0, size, color });
+        }
+      }
+    }
+    return particles;
+  }
+
+  interface ParticleOptions {
+    showSkyline: boolean;
+    showFiller: boolean;
+    showAmbient: boolean;
+    fit: boolean;
+    buildingList: Building[];
+    density: number;
+  }
+
+  function buildParticles(w: number, h: number, colors: string[], opts: ParticleOptions): Particle[] {
+    const centerX = w / 2;
+
+    // Fit mode: scale the skyline down to fit instead of dropping overflow.
+    if (opts.fit) {
+      const list = opts.buildingList;
+      let minX = Infinity, maxX = -Infinity;
+      for (const b of list) {
+        const [lo, hi] = buildingExtent(b);
+        minX = Math.min(minX, lo);
+        maxX = Math.max(maxX, hi);
+      }
+      const contentW = maxX - minX;
+      const scale = contentW > 0 ? Math.min(1, w / contentW) : 1;
+      return [...buildSkyline(w, h, colors, list, scale)];
+    }
+
+    const visible = opts.showSkyline ? visibleBuildings(w, opts.buildingList) : [];
+    const majorRanges: [number, number][] = visible.map((b) => {
+      const [minX, maxX] = buildingExtent(b);
+      return [centerX + minX, centerX + maxX];
+    });
+    return [
+      ...(opts.showAmbient ? buildAmbient(w, h, colors, opts.density) : []),
+      ...(opts.showFiller ? buildFiller(w, h, colors, majorRanges) : []),
+      ...buildSkyline(w, h, colors, visible),
+    ];
+  }
+
+  function drawRig(rig: Rig) {
+    const { ctx, w, h, particles, sparks } = rig;
+    ctx.clearRect(0, 0, w, h);
+    for (const p of particles) {
+      ctx.fillStyle = p.color;
+      const half = p.size / 2;
+      ctx.fillRect(Math.round(p.x - half), Math.round(p.y - half), p.size, p.size);
+    }
+    for (const s of sparks) {
+      ctx.globalAlpha = Math.max(0, 1 - s.age / s.life);
+      ctx.fillStyle = s.color;
+      const half = s.size / 2;
+      ctx.fillRect(Math.round(s.x - half), Math.round(s.y - half), s.size, s.size);
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  function setupRig(canvas: HTMLCanvasElement, dpr: number, colors: string[]): Rig {
+    // clientWidth/Height (layout size), NOT getBoundingClientRect — the
+    // latter includes the client-router's transition transform, which would
+    // size the backing store to a scaled box and stretch the pixels.
+    const w = Math.max(1, canvas.clientWidth);
+    const h = Math.max(1, canvas.clientHeight);
+    canvas.width = w * dpr;
+    canvas.height = h * dpr;
+    const ctx = canvas.getContext("2d") as CanvasRenderingContext2D;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.imageSmoothingEnabled = false;
+    const showSkyline = canvas.dataset.skyline !== "false";
+    const showFiller = canvas.dataset.filler !== "false";
+    const showAmbient = canvas.dataset.ambient !== "false";
+    const fit = canvas.dataset.fit === "true";
+    const density = canvas.dataset.density ? parseFloat(canvas.dataset.density) : 0.02;
+    const buildingList: Building[] = canvas.dataset.buildings
+      ? JSON.parse(canvas.dataset.buildings)
+      : ALL_BUILDINGS;
+    return {
+      canvas,
+      ctx,
+      w,
+      h,
+      particles: buildParticles(w, h, colors, { showSkyline, showFiller, showAmbient, fit, buildingList, density }),
+      sparks: [],
+      lastSparkX: -9999,
+      lastSparkY: -9999,
+      visible: true,
+    };
+  }
+
+  function spawnFirework(rig: Rig, x: number, y: number, colors: string[]) {
+    const sparkColors = [colors[1], colors[2], colors[3]];
+    const count = 10 + Math.floor(Math.random() * 6);
+    for (let i = 0; i < count; i++) {
+      const angle = (Math.PI * 2 * i) / count + Math.random() * 0.4;
+      const speed = 1.4 + Math.random() * 2.4;
+      rig.sparks.push({
+        x,
+        y,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed,
+        age: 0,
+        life: 22 + Math.random() * 12,
+        size: 2 + Math.round(Math.random() * 2),
+        color: sparkColors[Math.floor(Math.random() * sparkColors.length)],
+      });
+    }
+  }
+
+  // Canvases live in the swapped <main> slot, so re-run on each page entry —
+  // tearing the previous rigs (rAF, listeners, observers) down first so they
+  // don't stack up on stale, detached canvases.
+  const win = window as unknown as { __halftoneTeardown?: () => void };
+
+  function initHalftone() {
+    win.__halftoneTeardown?.();
+
+    const canvases = Array.from(document.querySelectorAll<HTMLCanvasElement>("canvas[data-halftone]"));
+    if (!canvases.length) return;
+
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const rootStyle = getComputedStyle(document.documentElement);
+    const colors = [
+      rootStyle.getPropertyValue("--color-hairline-strong").trim() || "#e9e7dd",
+      rootStyle.getPropertyValue("--color-red").trim() || "#e8433a",
+      rootStyle.getPropertyValue("--color-green").trim() || "#3ed68c",
+      rootStyle.getPropertyValue("--color-blue").trim() || "#55aaff",
+    ];
+
+    let rigs: Rig[] = canvases.map((canvas) => setupRig(canvas, dpr, colors));
+    rigs.forEach(drawRig);
+
+    let resizeTimer: ReturnType<typeof setTimeout>;
+    const onResize = () => {
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(() => {
+        rigs.forEach((rig, i) => {
+          const sparks = rigs[i].sparks;
+          rigs[i] = setupRig(rig.canvas, dpr, colors);
+          rigs[i].sparks = sparks;
+          drawRig(rigs[i]);
+        });
+      }, 200);
+    };
+    window.addEventListener("resize", onResize);
+
+    // A canvas box can resize without a window resize (e.g. workshop filters
+    // show/hide cards), so re-sync on any observed size change too.
+    const resizeObserver = new ResizeObserver(onResize);
+    rigs.forEach((r) => resizeObserver.observe(r.canvas));
+
+    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+    let io: IntersectionObserver | undefined;
+    let onPointerMove: ((e: PointerEvent) => void) | undefined;
+    let rafId: number | undefined;
+    let stopped = false;
+
+    if (rigs.length && !reduceMotion) {
+      io = new IntersectionObserver(
+        (entries) => {
+          for (const entry of entries) {
+            const rig = rigs.find((r) => r.canvas === entry.target);
+            if (rig) rig.visible = entry.isIntersecting;
+          }
+        },
+        { rootMargin: "200px" }
+      );
+      rigs.forEach((r) => io!.observe(r.canvas));
+
+      const pointer = { x: -9999, y: -9999 };
+      onPointerMove = (e) => {
+        pointer.x = e.clientX;
+        pointer.y = e.clientY;
+      };
+      window.addEventListener("pointermove", onPointerMove, { passive: true });
+
+      const REPEL_RADIUS = 55;
+      const REPEL_STRENGTH = 7;
+      // Critically damped: particles return home fast with no overshoot.
+      const SPRING_K = 0.11;
+      const DAMPING = 0.55;
+      const GRAVITY = 0.03;
+      const MAX_SPEED = 14;
+      const MAX_DISPLACEMENT = 46;
+      const SPARK_GRAVITY = 0.06;
+      const SPARK_DRAG = 0.96;
+      const SPARK_MIN_MOVE = 40;
+
+      const frame = () => {
+        for (const rig of rigs) {
+          if (!rig.visible) continue;
+
+          const rect = rig.canvas.getBoundingClientRect();
+          const localPointerX = pointer.x - rect.left;
+          const localPointerY = pointer.y - rect.top;
+
+          for (const p of rig.particles) {
+            const dxp = p.x - localPointerX;
+            const dyp = p.y - localPointerY;
+            const distp = Math.hypot(dxp, dyp);
+            if (distp < REPEL_RADIUS) {
+              const force = ((REPEL_RADIUS - distp) / REPEL_RADIUS) * REPEL_STRENGTH;
+              // Floor the distance so the direction stays stable when the
+              // pointer sits almost exactly on a particle.
+              const safeDist = Math.max(distp, 8);
+              p.vx += (dxp / safeDist) * force;
+              p.vy += (dyp / safeDist) * force;
+            }
+
+            p.vy += GRAVITY;
+            p.vx += (p.ox - p.x) * SPRING_K;
+            p.vy += (p.oy - p.y) * SPRING_K;
+
+            p.vx *= DAMPING;
+            p.vy *= DAMPING;
+
+            const speed = Math.hypot(p.vx, p.vy);
+            if (speed > MAX_SPEED) {
+              p.vx = (p.vx / speed) * MAX_SPEED;
+              p.vy = (p.vy / speed) * MAX_SPEED;
+            }
+
+            p.x += p.vx;
+            p.y += p.vy;
+
+            // Clamp displacement from home so repel + gravity can't out-pace
+            // the spring and let particles drift off-canvas.
+            const dxo = p.x - p.ox;
+            const dyo = p.y - p.oy;
+            const dispDist = Math.hypot(dxo, dyo);
+            if (dispDist > MAX_DISPLACEMENT) {
+              const scale = MAX_DISPLACEMENT / dispDist;
+              p.x = p.ox + dxo * scale;
+              p.y = p.oy + dyo * scale;
+              p.vx *= 0.3;
+              p.vy *= 0.3;
+            }
+          }
+
+          // Spark trail: burst where the pointer moves over the canvas, once
+          // it's travelled far enough from the last burst.
+          if (localPointerX >= 0 && localPointerX <= rig.w && localPointerY >= 0 && localPointerY <= rig.h) {
+            const movedFar = Math.hypot(localPointerX - rig.lastSparkX, localPointerY - rig.lastSparkY) > SPARK_MIN_MOVE;
+            if (movedFar) {
+              spawnFirework(rig, localPointerX, localPointerY, colors);
+              rig.lastSparkX = localPointerX;
+              rig.lastSparkY = localPointerY;
+            }
+          }
+
+          if (rig.sparks.length) {
+            rig.sparks = rig.sparks.filter((s) => s.age < s.life);
+            for (const s of rig.sparks) {
+              s.vy += SPARK_GRAVITY;
+              s.vx *= SPARK_DRAG;
+              s.vy *= SPARK_DRAG;
+              s.x += s.vx;
+              s.y += s.vy;
+              s.age += 1;
+            }
+          }
+
+          drawRig(rig);
+        }
+
+        if (!stopped) rafId = requestAnimationFrame(frame);
+      };
+
+      rafId = requestAnimationFrame(frame);
+    }
+
+    win.__halftoneTeardown = () => {
+      stopped = true;
+      if (rafId !== undefined) cancelAnimationFrame(rafId);
+      window.removeEventListener("resize", onResize);
+      if (onPointerMove) window.removeEventListener("pointermove", onPointerMove);
+      io?.disconnect();
+      resizeObserver.disconnect();
+      clearTimeout(resizeTimer);
+    };
+  }
+
+  document.addEventListener("astro:page-load", initHalftone);
+</script>
