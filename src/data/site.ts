@@ -1,7 +1,5 @@
 export const site = {
   name: "Sanjay Joshi",
-  description:
-    "Solo builder in Mauritius shipping products on a zero-cost stack — GitHub Actions, Vercel, and git-as-database.",
 };
 
 export const nav = [
