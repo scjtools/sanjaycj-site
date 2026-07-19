@@ -12,6 +12,10 @@ export default defineConfig({
   adapter: vercel({
     webAnalytics: { enabled: true }
   }),
+  prefetch: {
+    prefetchAll: true,
+    defaultStrategy: 'viewport'
+  },
   vite: {
     plugins: [tailwindcss()]
   },
