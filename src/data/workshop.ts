@@ -39,7 +39,7 @@ export const projects: Project[] = [
   },
   {
     name: "0xguessr",
-    url: "https://0xguessr.vercel.app/",
+    url: "https://0xguessr.sanjaycj.com",
     description: "A slot-machine web game that \"guesses\" Ethereum private keys. The odds are astronomically remote, but non-zero.",
     status: "live",
     tags: ["Gaming", "Crypto", "Entertainment"],
