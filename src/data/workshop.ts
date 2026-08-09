@@ -46,12 +46,12 @@ export const projects: Project[] = [
     sprite: "/sprites/0xguessr-pal-01.png",
   },
   {
-    name: "LinkedOut",
-    description: "A dopamine-driven job search platform inspired by FoodNeverComes, designed to make job hunting engaging and rewarding.",
-    status: "prototype",
-    tags: ["Dopamine", "Web", "Entertainment"],
-    sprite: "/sprites/linkedout-pal-01.png",
-    progress: 45,
+    name: "Starnet",
+    url: "https://sanjaycj.itch.io/starnet",
+    description: "Starnet is a minimalist network-management game about connecting a growing galaxy. Free to play.",
+    status: "live",
+    tags: ["Gaming", "Web", "Sci-Fi"],
+    sprite: "/sprites/starnet-pal-01.png",
   },
   {
     name: "Sportdex",
